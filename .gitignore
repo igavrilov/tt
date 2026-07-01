@@ -1,0 +1,11 @@
+# generated reports (may contain private data)
+*.html
+
+# claude code local settings
+.claude/settings.local.json
+
+# python
+__pycache__/
+*.pyc
+dist/
+*.egg-info/

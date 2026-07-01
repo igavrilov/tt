@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tt"
+version = "0.1.0"
+description = "Personal time tracking with invoice-ready reports"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+tt = "tt:main"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["tt.py"]

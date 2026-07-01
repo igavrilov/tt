@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "tt"
 version = "0.1.0"
 description = "Personal time tracking with invoice-ready reports"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = []
 

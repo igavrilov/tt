@@ -264,13 +264,17 @@ def run_timer(task, sid, start_file):
     print(f"\n  stopped {sid}")
 
 
-def cmd_start(project, task, no_timer):
-    now = now_local()
+def cmd_start(project, task, no_timer, at=None):
+    ts = now_local()
+    if at:
+        ts = datetime.fromisoformat(at)
+        if ts.tzinfo is None:
+            ts = ts.astimezone()
     sid = secrets.token_hex(2)
-    f = year_file(project, now.year)
-    append_line(f, f"{now.isoformat(timespec='seconds')} START {sid} {task}")
+    f = year_file(project, ts.year)
+    append_line(f, f"{ts.isoformat(timespec='seconds')} START {sid} {task}")
     print(sid)
-    if sys.stdout.isatty() and not no_timer:
+    if at is None and sys.stdout.isatty() and not no_timer:
         run_timer(task, sid, f)  # STOP lands in the START's file, even across midnight/year
 
 
@@ -300,6 +304,16 @@ def cmd_stop(project, sid, at):
             ts = ts.astimezone()
     append_line(opens[sid]["file"], f"{ts.isoformat(timespec='seconds')} STOP {sid}")
     print(f"stopped {sid}")
+
+
+def cmd_today(project):
+    today = now_local().date()
+    f = year_file(project, today.year)
+    lines = f.read_text().splitlines() if f.exists() else []
+    for l in lines:
+        ev = parse_line(l)
+        if ev and ev[0].date() == today:
+            print(l.rstrip())
 
 
 def cmd_report(cfg, project, start_s, end_s, fmt):
@@ -335,6 +349,7 @@ def main(argv=None):
     p = sub.add_parser("start", aliases=["s"])
     p.add_argument("task", nargs="*")
     p.add_argument("--no-timer", action="store_true")
+    p.add_argument("--at", help="ISO timestamp for the START (past or future)")
 
     for name, alias in (("continue", "c"), ("resume", "r")):
         p = sub.add_parser(name, aliases=[alias])
@@ -343,6 +358,8 @@ def main(argv=None):
     p = sub.add_parser("stop")
     p.add_argument("--session")
     p.add_argument("--at", help="ISO timestamp to backfill the STOP")
+
+    sub.add_parser("today", aliases=["t", "tail"])  # print today's raw log lines
 
     p = sub.add_parser("report", aliases=["rep"])
     p.add_argument("start_date")
@@ -356,11 +373,13 @@ def main(argv=None):
     cmd = args.cmd
 
     if cmd in ("start", "s"):
-        cmd_start(project, " ".join(args.task).strip() or "(untitled)", args.no_timer)
+        cmd_start(project, " ".join(args.task).strip() or "(untitled)", args.no_timer, args.at)
     elif cmd in ("continue", "c", "resume", "r"):
         cmd_continue(project, args.no_timer)
     elif cmd == "stop":
         cmd_stop(project, args.session, args.at)
+    elif cmd in ("today", "t", "tail"):
+        cmd_today(project)
     elif cmd in ("report", "rep"):
         cmd_report(cfg, project, args.start_date, args.end_date, args.fmt)
 

@@ -24,7 +24,7 @@ You can also run it without installing: `uv run tt.py report 2026-05-01 2026-05-
 
 ```sh
 tt start "backend work"         # start a task; prints a session id, shows a live timer (Ctrl+C stops)
-tt start "call" --at 2026-05-01T09:00:00   # backdate (or schedule) a session; no timer
+tt start "call" --at -1:30      # backdate the start by 1h30m (no timer); see --at formats below
 tt continue                     # start a new session reusing the last task's name (alias: resume)
 tt stop                         # stop the running session
 tt stop --session a1b2          # stop a specific session by id
@@ -34,7 +34,12 @@ tt report 2026-05-01 2026-05-31 # detailed report for a date range
 
 - `-p/--project NAME` on any command selects the project (default: `config.default_project`, else `default`).
 - Command prefixes: `s` = start, `c` = continue, `r` = resume, `t`/`tail` = today, `rep` = report.
-- `start --at <ISO timestamp>` records the `START` at a past or future time instead of now (skips the live timer).
+- `--at TIME` (on `start` and `stop`) sets the timestamp instead of *now*. Accepted forms:
+  - `-1` / `-1:30` → now minus 1h / 1h30m (`+` for the future)
+  - `20:00` / `7` → today at that clock time
+  - a full ISO timestamp, e.g. `2026-05-01T09:00:00`
+
+  On `start`, `--at` also skips the live timer.
 
 ### Interactive vs non-interactive
 

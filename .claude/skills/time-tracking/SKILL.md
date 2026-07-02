@@ -29,9 +29,10 @@ tt -p PROJECT stop --session "$id"
   explicitly to be safe — it guarantees `start` returns immediately.
 - Always keep the printed id and pass it to `stop --session`. Do not use bare `tt stop`
   from a harness: it only works when exactly one session is open and will error otherwise.
-- To log work whose start time already passed, backdate it: `tt -p PROJECT start "desc"
-  --at 2026-06-30T14:00:00` (records the `START` at that time and returns immediately;
-  stop it with `stop --session ID --at <end>`).
+- To log work whose start time already passed, backdate it with `--at` (also on `stop`):
+  `-1`/`-1:30` = now minus 1h/1h30m, `20:00`/`7` = today at that clock time, or a full ISO
+  timestamp. E.g. `tt -p PROJECT start "desc" --at -1:30` records the `START` 90 min ago and
+  returns immediately; stop it with `stop --session ID --at <end>`.
 - `tt -p PROJECT today` (alias `t`, `tail`) prints today's raw log lines — handy to check
   which sessions are currently open.
 

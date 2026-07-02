@@ -41,6 +41,16 @@ def test_open_session_live_vs_historical():
     assert not rows[0]["excluded"] and totals["secs"] > 0 and not warns
 
 
+def test_parse_at():
+    now = T("2026-07-02T14:30:00-04:00")
+    assert tt.parse_at("-1", now) == T("2026-07-02T13:30:00-04:00")
+    assert tt.parse_at("-1:30", now) == T("2026-07-02T13:00:00-04:00")
+    assert tt.parse_at("+2", now) == T("2026-07-02T16:30:00-04:00")
+    assert tt.parse_at("20:00", now) == T("2026-07-02T20:00:00-04:00")
+    assert tt.parse_at("7", now) == T("2026-07-02T07:00:00-04:00")
+    assert tt.parse_at("2026-05-01T09:00:00-04:00", now) == T("2026-05-01T09:00:00-04:00")
+
+
 def test_amount_and_fmt():
     assert tt.fmt_hms(3661) == "01:01:01"
     assert tt.fmt_hms(147 * 3600 + 55 * 60) == "147:55:00"

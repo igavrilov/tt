@@ -8,7 +8,7 @@ import secrets
 import sys
 import time
 import tomllib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 TT_HOME = Path.home() / ".tt"
@@ -48,6 +48,24 @@ def append_line(path, line):
 
 def now_local():
     return datetime.now().astimezone()
+
+
+def parse_at(s, now=None):
+    """Flexible --at:
+      '-1' / '-1:30'  -> now minus H[:MM]   ('+' for the future)
+      '20:00' / '7'   -> today at that clock time
+      else            -> full ISO timestamp
+    """
+    now = now or now_local()
+    if s and s[0] in "+-":
+        h, _, m = s[1:].partition(":")
+        delta = timedelta(hours=int(h or 0), minutes=int(m or 0))
+        return now - delta if s[0] == "-" else now + delta
+    if all(p.isdigit() for p in s.split(":")):  # 'HH:MM' or 'H' clock time today
+        h, _, m = s.partition(":")
+        return now.replace(hour=int(h), minute=int(m or 0), second=0, microsecond=0)
+    ts = datetime.fromisoformat(s)
+    return ts if ts.tzinfo else ts.astimezone()
 
 
 # ---------- log parsing (pure, testable) ----------
@@ -265,11 +283,7 @@ def run_timer(task, sid, start_file):
 
 
 def cmd_start(project, task, no_timer, at=None):
-    ts = now_local()
-    if at:
-        ts = datetime.fromisoformat(at)
-        if ts.tzinfo is None:
-            ts = ts.astimezone()
+    ts = parse_at(at) if at else now_local()
     sid = secrets.token_hex(2)
     f = year_file(project, ts.year)
     append_line(f, f"{ts.isoformat(timespec='seconds')} START {sid} {task}")
@@ -297,11 +311,7 @@ def cmd_stop(project, sid, at):
                      "\n  ".join(f"{s} {v['task']}" for s, v in opens.items()))
     if sid not in opens:
         sys.exit(f"tt: session {sid} is not running")
-    ts = now_local()
-    if at:
-        ts = datetime.fromisoformat(at)
-        if ts.tzinfo is None:
-            ts = ts.astimezone()
+    ts = parse_at(at) if at else now_local()
     append_line(opens[sid]["file"], f"{ts.isoformat(timespec='seconds')} STOP {sid}")
     print(f"stopped {sid}")
 
@@ -349,7 +359,7 @@ def main(argv=None):
     p = sub.add_parser("start", aliases=["s"])
     p.add_argument("task", nargs="*")
     p.add_argument("--no-timer", action="store_true")
-    p.add_argument("--at", help="ISO timestamp for the START (past or future)")
+    p.add_argument("--at", help="time for the START: -1[:30], HH:MM, H, or ISO timestamp")
 
     for name, alias in (("continue", "c"), ("resume", "r")):
         p = sub.add_parser(name, aliases=[alias])
@@ -357,7 +367,7 @@ def main(argv=None):
 
     p = sub.add_parser("stop")
     p.add_argument("--session")
-    p.add_argument("--at", help="ISO timestamp to backfill the STOP")
+    p.add_argument("--at", help="time for the STOP: -1[:30], HH:MM, H, or ISO timestamp")
 
     sub.add_parser("today", aliases=["t", "tail"])  # print today's raw log lines
 

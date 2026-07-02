@@ -28,7 +28,7 @@ tt start "call" --at -1:30      # backdate the start by 1h30m (no timer); see --
 tt continue                     # start a new session reusing the last task's name (alias: resume)
 tt stop                         # stop the running session
 tt stop --session a1b2          # stop a specific session by id
-tt today                        # print today's raw log lines (alias: t, tail)
+tt today                        # print today's log lines + total time today (alias: t, tail)
 tt report 2026-05-01 2026-05-31 # detailed report for a date range
 ```
 
@@ -39,7 +39,8 @@ tt report 2026-05-01 2026-05-31 # detailed report for a date range
   - `20:00` / `7` → today at that clock time
   - a full ISO timestamp, e.g. `2026-05-01T09:00:00`
 
-  On `start`, `--at` also skips the live timer.
+  `start --at` still shows the live timer (counting from the backdated start); use `--no-timer`
+  or a non-TTY to record and exit immediately.
 
 ### Interactive vs non-interactive
 

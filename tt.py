@@ -270,11 +270,12 @@ def render_html(project, user, start_date, end_date, rows, totals, currency):
 
 # ---------- commands ----------
 
-def run_timer(task, sid, start_file):
-    start = time.monotonic()
+def run_timer(task, sid, start_file, started):
+    base = (now_local() - started).total_seconds()  # count from the (maybe backdated) start
+    t0 = time.monotonic()
     try:
         while True:
-            print(f"\r  {task}  {fmt_hms(time.monotonic() - start)}", end="", flush=True)
+            print(f"\r  {task}  {fmt_hms(max(0, base + time.monotonic() - t0))}", end="", flush=True)
             time.sleep(1)
     except KeyboardInterrupt:
         pass
@@ -288,8 +289,8 @@ def cmd_start(project, task, no_timer, at=None):
     f = year_file(project, ts.year)
     append_line(f, f"{ts.isoformat(timespec='seconds')} START {sid} {task}")
     print(sid)
-    if at is None and sys.stdout.isatty() and not no_timer:
-        run_timer(task, sid, f)  # STOP lands in the START's file, even across midnight/year
+    if sys.stdout.isatty() and not no_timer:
+        run_timer(task, sid, f, ts)  # STOP lands in the START's file, even across midnight/year
 
 
 def cmd_continue(project, no_timer):
@@ -317,13 +318,17 @@ def cmd_stop(project, sid, at):
 
 
 def cmd_today(project):
-    today = now_local().date()
+    now = now_local()
+    today = now.date()
     f = year_file(project, today.year)
     lines = f.read_text().splitlines() if f.exists() else []
     for l in lines:
         ev = parse_line(l)
         if ev and ev[0].date() == today:
             print(l.rstrip())
+    sessions = pair_sessions(read_events(project, today.year, today.year))
+    _, totals, _ = build_report(sessions, today, today, None, now, today)  # open sessions count to now
+    print(f"\nTotal: {fmt_hms(totals['secs'])}")
 
 
 def cmd_report(cfg, project, start_s, end_s, fmt):

@@ -97,9 +97,9 @@ tab_status = true      # optional; show the running task + time in the cmux side
 The report header shows the project `name` if set (else the project id) with `[user].name` as subtitle.
 
 With `[cmux].tab_status = true`, an interactive `tt start`/`continue` running inside
-[cmux](https://cmux.io) adds two sidebar status lines to its workspace — the task name and the
-elapsed time (`H:MM`, refreshed each minute) — and clears them when the timer stops. It's a no-op
-outside cmux or with `--no-timer`.
+[cmux](https://cmux.io) shows a sidebar status line on its workspace — `H:MM <task>` with a clock
+icon, refreshed each minute — and clears it when the timer stops. It's a no-op outside cmux or
+with `--no-timer`.
 
 ## Storage
 

@@ -308,22 +308,20 @@ def render_html(project, user, start_date, end_date, rows, totals, currency):
 def run_timer(task, sid, start_file, started, cmux_ws=None):
     base = (now_local() - started).total_seconds()  # count from the (maybe backdated) start
     t0 = time.monotonic()
-    if cmux_ws:
-        cmux_set_status(cmux_ws, "tt_task", task, icon="clock")  # two sidebar lines: task + time
     last_min = -1
     try:
         while True:
             elapsed = max(0, base + time.monotonic() - t0)
             print(f"\r  {task}  {fmt_hms(elapsed)}", end="", flush=True)
-            if cmux_ws and int(elapsed // 60) != last_min:  # refresh the time line once per minute
+            if cmux_ws and int(elapsed // 60) != last_min:  # refresh the sidebar line once per minute
                 last_min = int(elapsed // 60)
-                cmux_set_status(cmux_ws, "tt_time", f"{int(elapsed // 3600):d}:{int(elapsed // 60) % 60:02d}")
+                hhmm = f"{int(elapsed // 3600):d}:{int(elapsed // 60) % 60:02d}"
+                cmux_set_status(cmux_ws, "tt", f"{hhmm} {task}", icon="clock")
             time.sleep(1)
     except KeyboardInterrupt:
         pass
     if cmux_ws:
-        cmux_clear_status(cmux_ws, "tt_task")
-        cmux_clear_status(cmux_ws, "tt_time")
+        cmux_clear_status(cmux_ws, "tt")
     append_line(start_file, f"{now_local().isoformat(timespec='seconds')} STOP {sid}")
     print(f"\n  stopped {sid}")
 

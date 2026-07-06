@@ -5,6 +5,8 @@ import csv
 import html
 import json
 import secrets
+import shutil
+import subprocess
 import sys
 import time
 import tomllib
@@ -66,6 +68,44 @@ def parse_at(s, now=None):
         return now.replace(hour=int(h), minute=int(m or 0), second=0, microsecond=0)
     ts = datetime.fromisoformat(s)
     return ts if ts.tzinfo else ts.astimezone()
+
+
+# ---------- cmux tab status (optional) ----------
+
+def _cmux(*args):
+    """Run a cmux CLI command; return stdout on success, else None. Never raises."""
+    if not shutil.which("cmux"):
+        return None
+    try:
+        r = subprocess.run(["cmux", *args], capture_output=True, text=True, timeout=5)
+        return r.stdout if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def cmux_workspace():
+    """Caller's workspace ref when running inside cmux, else None."""
+    out = _cmux("identify", "--json")
+    try:
+        return json.loads(out)["caller"]["workspace_ref"] if out else None
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def cmux_title(ws):
+    """Current custom title of a workspace, or None."""
+    out = _cmux("workspace", "list", "--json")
+    try:
+        for w in json.loads(out)["workspaces"]:
+            if w.get("ref") == ws:
+                return w.get("custom_title")
+    except (KeyError, ValueError, TypeError):
+        pass
+    return None
+
+
+def cmux_set_title(ws, title):
+    _cmux("workspace", "rename", ws, "--title", title)
 
 
 # ---------- log parsing (pure, testable) ----------
@@ -270,34 +310,43 @@ def render_html(project, user, start_date, end_date, rows, totals, currency):
 
 # ---------- commands ----------
 
-def run_timer(task, sid, start_file, started):
+def run_timer(task, sid, start_file, started, cmux_ws=None):
     base = (now_local() - started).total_seconds()  # count from the (maybe backdated) start
     t0 = time.monotonic()
+    orig_title = cmux_title(cmux_ws) if cmux_ws else None
+    last_min = -1
     try:
         while True:
-            print(f"\r  {task}  {fmt_hms(max(0, base + time.monotonic() - t0))}", end="", flush=True)
+            elapsed = max(0, base + time.monotonic() - t0)
+            print(f"\r  {task}  {fmt_hms(elapsed)}", end="", flush=True)
+            if cmux_ws and int(elapsed // 60) != last_min:  # refresh tab once per minute
+                last_min = int(elapsed // 60)
+                cmux_set_title(cmux_ws, f"⏱ {task} {int(elapsed // 3600):d}:{int(elapsed // 60) % 60:02d}")
             time.sleep(1)
     except KeyboardInterrupt:
         pass
+    if cmux_ws:
+        cmux_set_title(cmux_ws, orig_title or task)  # restore the tab
     append_line(start_file, f"{now_local().isoformat(timespec='seconds')} STOP {sid}")
     print(f"\n  stopped {sid}")
 
 
-def cmd_start(project, task, no_timer, at=None):
+def cmd_start(project, task, no_timer, at=None, cmux_status=False):
     ts = parse_at(at) if at else now_local()
     sid = secrets.token_hex(2)
     f = year_file(project, ts.year)
     append_line(f, f"{ts.isoformat(timespec='seconds')} START {sid} {task}")
     print(sid)
     if sys.stdout.isatty() and not no_timer:
-        run_timer(task, sid, f, ts)  # STOP lands in the START's file, even across midnight/year
+        ws = cmux_workspace() if cmux_status else None
+        run_timer(task, sid, f, ts, ws)  # STOP lands in the START's file, even across midnight/year
 
 
-def cmd_continue(project, no_timer):
+def cmd_continue(project, no_timer, cmux_status=False):
     task = last_task(project)
     if task is None:
         sys.exit(f"tt: no previous task in project '{project}'")
-    cmd_start(project, task, no_timer)
+    cmd_start(project, task, no_timer, cmux_status=cmux_status)
 
 
 def cmd_stop(project, sid, at):
@@ -385,12 +434,13 @@ def main(argv=None):
 
     args = ap.parse_args(argv)
     project = resolve_project(cfg, args.project)
+    cmux_status = bool(cfg.get("cmux", {}).get("tab_status", False))
     cmd = args.cmd
 
     if cmd in ("start", "s"):
-        cmd_start(project, " ".join(args.task).strip() or "(untitled)", args.no_timer, args.at)
+        cmd_start(project, " ".join(args.task).strip() or "(untitled)", args.no_timer, args.at, cmux_status)
     elif cmd in ("continue", "c", "resume", "r"):
-        cmd_continue(project, args.no_timer)
+        cmd_continue(project, args.no_timer, cmux_status)
     elif cmd == "stop":
         cmd_stop(project, args.session, args.at)
     elif cmd in ("today", "t", "tail"):

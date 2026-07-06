@@ -1,5 +1,7 @@
 """Runnable check for the parser + report rules. `python3 test_tt.py`."""
+import tempfile
 from datetime import date, datetime
+from pathlib import Path
 
 import tt
 
@@ -59,6 +61,19 @@ def test_amount_and_fmt():
     rows, totals, _ = tt.build_report(sess, date(2026, 5, 1), date(2026, 5, 31),
                                       {"amount": 120, "currency": "USD"}, T("2026-07-01T00:00:00-04:00"), date(2026, 7, 1))
     assert rows[0]["amount"] == 240.0 and totals["amount"] == 240.0
+
+
+def test_lock():
+    tt.LOCK_FILE = Path(tempfile.mkdtemp()) / "timer.lock"
+    tt.acquire_lock("A")                       # first timer holds the lock
+    try:
+        tt.acquire_lock("B")
+        assert False, "expected the second acquire to exit"
+    except SystemExit:
+        pass
+    tt.release_lock()
+    tt.acquire_lock("C")                        # free again after release
+    tt.release_lock()
 
 
 if __name__ == "__main__":

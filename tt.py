@@ -4,6 +4,7 @@ import argparse
 import csv
 import html
 import json
+import os
 import secrets
 import shutil
 import subprocess
@@ -14,6 +15,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 TT_HOME = Path.home() / ".tt"
+LOCK_FILE = TT_HOME / "timer.lock"
 
 
 # ---------- config / paths ----------
@@ -50,6 +52,21 @@ def append_line(path, line):
 
 def now_local():
     return datetime.now().astimezone()
+
+
+def acquire_lock(task):
+    """Take the single-timer lock, or exit telling the user how to clear a stale one."""
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with LOCK_FILE.open("x") as f:  # O_EXCL => atomic, no race
+            f.write(f"pid {os.getpid()} — {task}")
+    except FileExistsError:
+        sys.exit(f"tt: a timer is already running ({LOCK_FILE.read_text().strip()}).\n"
+                 f"    If that's wrong (a crashed timer), remove the lock:  rm {LOCK_FILE}")
+
+
+def release_lock():
+    LOCK_FILE.unlink(missing_ok=True)
 
 
 def parse_at(s, now=None):
@@ -316,25 +333,32 @@ def run_timer(task, sid, start_file, started, cmux_ws=None):
             if cmux_ws and int(elapsed // 60) != last_min:  # refresh the sidebar line once per minute
                 last_min = int(elapsed // 60)
                 hhmm = f"{int(elapsed // 3600):d}:{int(elapsed // 60) % 60:02d}"
-                cmux_set_status(cmux_ws, f"tt_{sid}", f"{hhmm} {task}", icon="clock")  # per-session key
+                cmux_set_status(cmux_ws, "tt", f"{hhmm} {task}", icon="clock")
             time.sleep(1)
     except KeyboardInterrupt:
         pass
-    if cmux_ws:
-        cmux_clear_status(cmux_ws, f"tt_{sid}")
-    append_line(start_file, f"{now_local().isoformat(timespec='seconds')} STOP {sid}")
-    print(f"\n  stopped {sid}")
+    finally:  # always clean up, even on Ctrl+C
+        if cmux_ws:
+            cmux_clear_status(cmux_ws, "tt")
+        append_line(start_file, f"{now_local().isoformat(timespec='seconds')} STOP {sid}")
+        print(f"\n  stopped {sid}")
 
 
 def cmd_start(project, task, no_timer, at=None, cmux_status=False):
+    interactive = sys.stdout.isatty() and not no_timer
+    if interactive:
+        acquire_lock(task)  # before START, so a rejected start leaves no dangling session
     ts = parse_at(at) if at else now_local()
     sid = secrets.token_hex(2)
     f = year_file(project, ts.year)
     append_line(f, f"{ts.isoformat(timespec='seconds')} START {sid} {task}")
     print(sid)
-    if sys.stdout.isatty() and not no_timer:
+    if interactive:
         ws = cmux_workspace() if cmux_status else None
-        run_timer(task, sid, f, ts, ws)  # STOP lands in the START's file, even across midnight/year
+        try:
+            run_timer(task, sid, f, ts, ws)  # STOP lands in the START's file, even across midnight/year
+        finally:
+            release_lock()
 
 
 def cmd_continue(project, no_timer, cmux_status=False):

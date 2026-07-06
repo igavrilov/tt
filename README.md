@@ -53,9 +53,19 @@ id=$(tt -p acme start "build feature" --no-timer)
 tt -p acme stop --session "$id"
 ```
 
-Sessions are independent and can overlap: several harnesses (or a human and a harness) can track in
-the same project in parallel. `stop` always closes a session *by id*, so they never steal each
-other's clock.
+Non-interactive sessions are independent and can overlap: several harnesses can track in parallel,
+and `stop` always closes a session *by id*, so they never steal each other's clock.
+
+The **interactive timer is single-instance**: starting one takes a lock at `~/.tt/timer.lock`, so a
+second `tt start` in a TTY refuses with the running task and how to clear a stale lock:
+
+```
+tt: a timer is already running (pid 1234 — build feature).
+    If that's wrong (a crashed timer), remove the lock:  rm ~/.tt/timer.lock
+```
+
+The lock is released on `Ctrl+C`. A hard-killed timer leaves it behind — remove it with `rm` as
+shown. `--no-timer`/harness sessions never take the lock.
 
 ## Reports
 

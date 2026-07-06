@@ -90,15 +90,16 @@ rate.amount = 120
 rate.currency = "USD"
 
 [cmux]
-tab_status = true      # optional; live-update the cmux workspace tab with the running task + time
+tab_status = true      # optional; show the running task + time in the cmux sidebar
 ```
 
 `report` multiplies hours by `rate.amount` for the amount column and total. No rate → hours only.
 The report header shows the project `name` if set (else the project id) with `[user].name` as subtitle.
 
 With `[cmux].tab_status = true`, an interactive `tt start`/`continue` running inside
-[cmux](https://cmux.io) renames its workspace tab to `⏱ <task> H:MM` (refreshed each minute) and
-restores the original tab title when the timer stops. It's a no-op outside cmux or with `--no-timer`.
+[cmux](https://cmux.io) adds two sidebar status lines to its workspace — the task name and the
+elapsed time (`H:MM`, refreshed each minute) — and clears them when the timer stops. It's a no-op
+outside cmux or with `--no-timer`.
 
 ## Storage
 

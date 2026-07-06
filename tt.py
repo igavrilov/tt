@@ -92,20 +92,15 @@ def cmux_workspace():
         return None
 
 
-def cmux_title(ws):
-    """Current custom title of a workspace, or None."""
-    out = _cmux("workspace", "list", "--json")
-    try:
-        for w in json.loads(out)["workspaces"]:
-            if w.get("ref") == ws:
-                return w.get("custom_title")
-    except (KeyError, ValueError, TypeError):
-        pass
-    return None
+def cmux_set_status(ws, key, value, icon=None):
+    args = ["set-status", key, value, "--workspace", ws]
+    if icon:
+        args += ["--icon", icon]
+    _cmux(*args)
 
 
-def cmux_set_title(ws, title):
-    _cmux("workspace", "rename", ws, "--title", title)
+def cmux_clear_status(ws, key):
+    _cmux("clear-status", key, "--workspace", ws)
 
 
 # ---------- log parsing (pure, testable) ----------
@@ -313,20 +308,22 @@ def render_html(project, user, start_date, end_date, rows, totals, currency):
 def run_timer(task, sid, start_file, started, cmux_ws=None):
     base = (now_local() - started).total_seconds()  # count from the (maybe backdated) start
     t0 = time.monotonic()
-    orig_title = cmux_title(cmux_ws) if cmux_ws else None
+    if cmux_ws:
+        cmux_set_status(cmux_ws, "tt_task", task, icon="clock")  # two sidebar lines: task + time
     last_min = -1
     try:
         while True:
             elapsed = max(0, base + time.monotonic() - t0)
             print(f"\r  {task}  {fmt_hms(elapsed)}", end="", flush=True)
-            if cmux_ws and int(elapsed // 60) != last_min:  # refresh tab once per minute
+            if cmux_ws and int(elapsed // 60) != last_min:  # refresh the time line once per minute
                 last_min = int(elapsed // 60)
-                cmux_set_title(cmux_ws, f"⏱ {task} {int(elapsed // 3600):d}:{int(elapsed // 60) % 60:02d}")
+                cmux_set_status(cmux_ws, "tt_time", f"{int(elapsed // 3600):d}:{int(elapsed // 60) % 60:02d}")
             time.sleep(1)
     except KeyboardInterrupt:
         pass
     if cmux_ws:
-        cmux_set_title(cmux_ws, orig_title or task)  # restore the tab
+        cmux_clear_status(cmux_ws, "tt_task")
+        cmux_clear_status(cmux_ws, "tt_time")
     append_line(start_file, f"{now_local().isoformat(timespec='seconds')} STOP {sid}")
     print(f"\n  stopped {sid}")
 

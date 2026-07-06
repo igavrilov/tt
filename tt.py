@@ -316,12 +316,12 @@ def run_timer(task, sid, start_file, started, cmux_ws=None):
             if cmux_ws and int(elapsed // 60) != last_min:  # refresh the sidebar line once per minute
                 last_min = int(elapsed // 60)
                 hhmm = f"{int(elapsed // 3600):d}:{int(elapsed // 60) % 60:02d}"
-                cmux_set_status(cmux_ws, "tt", f"{hhmm} {task}", icon="clock")
+                cmux_set_status(cmux_ws, f"tt_{sid}", f"{hhmm} {task}", icon="clock")  # per-session key
             time.sleep(1)
     except KeyboardInterrupt:
         pass
     if cmux_ws:
-        cmux_clear_status(cmux_ws, "tt")
+        cmux_clear_status(cmux_ws, f"tt_{sid}")
     append_line(start_file, f"{now_local().isoformat(timespec='seconds')} STOP {sid}")
     print(f"\n  stopped {sid}")
 

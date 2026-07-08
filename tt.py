@@ -399,6 +399,15 @@ def cmd_today(project):
     print(f"\nTotal: {fmt_hms(totals['secs'])}")
 
 
+def cmd_log(project, length):
+    d = (TT_HOME / project / "logs")
+    lines = []
+    for f in sorted(d.glob("*.log")):  # oldest year first
+        lines += f.read_text().splitlines()
+    for l in lines[-length:]:
+        print(l.rstrip())
+
+
 def cmd_report(cfg, project, start_s, end_s, fmt):
     start_date = date.fromisoformat(start_s)
     end_date = date.fromisoformat(end_s) if end_s else date.today()
@@ -444,6 +453,9 @@ def main(argv=None):
 
     sub.add_parser("today", aliases=["t", "tail"])  # print today's raw log lines
 
+    p = sub.add_parser("log")  # tail the last N raw log lines
+    p.add_argument("--length", type=int, nargs="?", const=20, default=20)
+
     p = sub.add_parser("report", aliases=["rep"])
     p.add_argument("start_date")
     p.add_argument("end_date", nargs="?")
@@ -464,6 +476,8 @@ def main(argv=None):
         cmd_stop(project, args.session, args.at)
     elif cmd in ("today", "t", "tail"):
         cmd_today(project)
+    elif cmd == "log":
+        cmd_log(project, args.length)
     elif cmd in ("report", "rep"):
         cmd_report(cfg, project, args.start_date, args.end_date, args.fmt)
 

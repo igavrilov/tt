@@ -29,6 +29,7 @@ tt continue                     # start a new session reusing the last task's na
 tt stop                         # stop the running session
 tt stop --session a1b2          # stop a specific session by id
 tt today                        # print today's log lines + total time today (alias: t, tail)
+tt log --length 20              # print the last N raw log lines (default 20)
 tt report 2026-05-01 2026-05-31 # detailed report for a date range
 ```
 
@@ -110,6 +111,10 @@ With `[cmux].tab_status = true`, an interactive `tt start`/`continue` running in
 [cmux](https://cmux.io) shows a sidebar status line on its workspace — `H:MM <task>` with a clock
 icon, refreshed each minute — and clears it when the timer stops. It's a no-op outside cmux or
 with `--no-timer`.
+
+If a stale pill lingers (e.g. the timer was hard-killed), clear it manually with `cmux
+clear-status tt` (tt uses the status key `tt`). If it persists even after `cmux list-status` shows
+it gone, that's a stale client-side render — restart cmux.
 
 ## Storage
 

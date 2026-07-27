@@ -275,10 +275,11 @@ def render_json(project, user, start_date, end_date, rows, totals, currency):
     }, indent=2) + "\n"
 
 
-def render_html(project, user, start_date, end_date, rows, totals, currency):
+def render_html(project, user, start_date, end_date, rows, totals, currency, rate=None):
     e = html.escape
     total = f"{fmt_hms(totals['secs'])}"
     amount = f"{totals['amount']:.2f} {e(currency)}" if totals["amount"] is not None else ""
+    rate_str = f"<span class='rate'>@ {rate['amount']:g} {e(currency)}/h</span>" if rate else ""
     trs = "\n".join(
         "<tr{cls}><td>{date}</td><td>{task}</td><td>{start}</td><td>{end}</td>"
         "<td class='num'>{dur}</td><td class='num'>{amt}</td></tr>".format(
@@ -303,12 +304,13 @@ def render_html(project, user, start_date, end_date, rows, totals, currency):
   th {{ color: #666; font-weight: 600; border-bottom: 2px solid #ccc; }}
   .num {{ text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }}
   tr.open td {{ color: #999; font-style: italic; }}
+  .rate {{ color: #aaa; }}
 </style></head><body>
 <header>
   <h1>Time report — {e(project)}</h1>
   {f'<div class="subtitle">{e(user)}</div>' if user else ''}
   <div class="range">{start_date} – {end_date}</div>
-  <div class="totals">Total: <b>{total}</b>{f" &nbsp; Amount: <b>{amount}</b>" if amount else ""}</div>
+  <div class="totals">Total: <b>{total}</b>{f" &nbsp; Amount: <b>{amount}</b> {rate_str}" if amount else ""}</div>
 </header>
 <table>
 <thead><tr><th>Date</th><th>Task</th><th>Start</th><th>End</th>
@@ -425,7 +427,7 @@ def cmd_report(cfg, project, start_s, end_s, fmt):
     elif fmt == "json":
         sys.stdout.write(render_json(label, user, start_date, end_date, rows, totals, currency))
     elif fmt == "html":
-        sys.stdout.write(render_html(label, user, start_date, end_date, rows, totals, currency))
+        sys.stdout.write(render_html(label, user, start_date, end_date, rows, totals, currency, rate))
     else:
         sys.stdout.write(render_text(label, user, start_date, end_date, rows, totals, currency))
 

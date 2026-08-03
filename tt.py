@@ -202,7 +202,7 @@ def build_report(sessions, start_date, end_date, rate, now, today):
     """-> (rows, {total_secs, total_amount}, warnings). Groups by start date, range-filtered."""
     live = end_date >= today
     rows, warnings = [], []
-    total_secs, total_amount = 0.0, 0.0
+    total_secs = 0.0
     for s in sorted(sessions, key=lambda s: s["start"]):
         d = s["start"].date()
         if not (start_date <= d <= end_date):
@@ -228,9 +228,8 @@ def build_report(sessions, start_date, end_date, rate, now, today):
         })
         if not excluded:
             total_secs += secs
-            if rate:
-                total_amount += amount
-    totals = {"secs": total_secs, "amount": round(total_amount, 2) if rate else None}
+    # total from total time, not summed per-row cents — avoids rounding drift
+    totals = {"secs": total_secs, "amount": round(total_secs / 3600 * rate["amount"], 2) if rate else None}
     return rows, totals, warnings
 
 

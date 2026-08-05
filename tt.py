@@ -134,12 +134,23 @@ def parse_line(line):
     return (dt, parts[1], parts[2], parts[3] if len(parts) > 3 else "")
 
 
-def read_events(project, y0, y1):
+def parse_extra(line):
+    """-> (dt, amount, desc) or None for '<ts> EXTRA <amount> <desc>' lines."""
+    parts = line.strip().split(maxsplit=3)
+    if len(parts) < 4 or parts[1] != "EXTRA":
+        return None
+    try:
+        return datetime.fromisoformat(parts[0]), float(parts[2]), parts[3]
+    except ValueError:
+        return None
+
+
+def read_events(project, y0, y1, parser=parse_line):
     events = []
     for year in range(y0, y1 + 1):
         f = year_file(project, year)
         if f.exists():
-            events += filter(None, (parse_line(l) for l in f.read_text().splitlines()))
+            events += filter(None, (parser(l) for l in f.read_text().splitlines()))
     return events
 
 
@@ -233,13 +244,27 @@ def build_report(sessions, start_date, end_date, rate, now, today):
     return rows, totals, warnings
 
 
+def build_extras(extras, start_date, end_date, totals):
+    """-> range-filtered extra rows; folds their sum into totals['amount']."""
+    rows = [{"date": dt.strftime("%d/%m/%Y"), "desc": desc, "amount": amount}
+            for dt, amount, desc in sorted(extras) if start_date <= dt.date() <= end_date]
+    if rows:
+        totals["amount"] = round((totals["amount"] or 0) + sum(r["amount"] for r in rows), 2)
+    return rows
+
+
 # ---------- output formats ----------
 
 def _amount_cell(a, currency):
     return "" if a is None else f"{a:.2f} {currency}".strip()
 
 
-def render_text(project, user, start_date, end_date, rows, totals, currency):
+def _fmt_table(table):
+    widths = [max(len(row[i]) for row in table) for i in range(len(table[0]))]
+    return ["  ".join(c.ljust(widths[i]) for i, c in enumerate(row)).rstrip() for row in table]
+
+
+def render_text(project, user, start_date, end_date, rows, totals, currency, extras=()):
     out = [f"Time report — {project}"]
     if user:
         out.append(user)
@@ -248,37 +273,51 @@ def render_text(project, user, start_date, end_date, rows, totals, currency):
     if totals["amount"] is not None:
         total += f"   Amount: {totals['amount']:.2f} {currency}"
     out += [total, ""]
-    headers = ["Date", "Task", "Start", "End", "Duration", "Amount"]
-    table = [headers] + [[r["date"], r["task"], r["start"], r["end"], r["duration"],
-                          _amount_cell(r["amount"], currency)] for r in rows]
-    widths = [max(len(row[i]) for row in table) for i in range(len(headers))]
-    for row in table:
-        out.append("  ".join(c.ljust(widths[i]) for i, c in enumerate(row)).rstrip())
+    if extras:
+        out += _fmt_table([["Date", "Extra", "Amount"]] +
+                          [[x["date"], x["desc"], _amount_cell(x["amount"], currency)] for x in extras])
+        out.append("")
+    out += _fmt_table([["Date", "Task", "Start", "End", "Duration", "Amount"]] +
+                      [[r["date"], r["task"], r["start"], r["end"], r["duration"],
+                        _amount_cell(r["amount"], currency)] for r in rows])
     return "\n".join(out) + "\n"
 
 
-def render_csv(rows, currency):
+def render_csv(rows, currency, extras=()):
     w = csv.writer(sys.stdout)
     w.writerow(["date", "task", "start", "end", "duration", "amount"])
+    for x in extras:
+        w.writerow([x["date"], x["desc"], "", "", "", _amount_cell(x["amount"], currency)])
     for r in rows:
         w.writerow([r["date"], r["task"], r["start"], r["end"], r["duration"], _amount_cell(r["amount"], currency)])
     return ""
 
 
-def render_json(project, user, start_date, end_date, rows, totals, currency):
+def render_json(project, user, start_date, end_date, rows, totals, currency, extras=()):
     return json.dumps({
         "project": project, "user": user, "start_date": str(start_date), "end_date": str(end_date),
         "currency": currency, "total_duration": fmt_hms(totals["secs"]),
         "total_seconds": int(totals["secs"]), "total_amount": totals["amount"],
+        "extras": [{"date": x["date"], "description": x["desc"], "amount": x["amount"]} for x in extras],
         "sessions": [{k: r[k] for k in ("date", "task", "start", "end", "duration", "amount", "open")} for r in rows],
     }, indent=2) + "\n"
 
 
-def render_html(project, user, start_date, end_date, rows, totals, currency, rate=None):
+def render_html(project, user, start_date, end_date, rows, totals, currency, rate=None, extras=()):
     e = html.escape
     total = f"{fmt_hms(totals['secs'])}"
     amount = f"{totals['amount']:.2f} {e(currency)}" if totals["amount"] is not None else ""
     rate_str = f"<span class='rate'>@ {rate['amount']:g} {e(currency)}/h</span>" if rate else ""
+    extras_html = ""
+    if extras:
+        xtrs = "\n".join(
+            f"<tr><td>{e(x['date'])}</td><td>{e(x['desc'])}</td>"
+            f"<td class='num'>{e(_amount_cell(x['amount'], currency))}</td></tr>"
+            for x in extras)
+        extras_html = (
+            "<table class='extras'>\n"
+            "<thead><tr><th>Date</th><th>Extra</th><th class='num'>Amount</th></tr></thead>\n"
+            f"<tbody>\n{xtrs}\n</tbody></table>\n")
     trs = "\n".join(
         "<tr{cls}><td>{date}</td><td>{task}</td><td>{start}</td><td>{end}</td>"
         "<td class='num'>{dur}</td><td class='num'>{amt}</td></tr>".format(
@@ -304,6 +343,7 @@ def render_html(project, user, start_date, end_date, rows, totals, currency, rat
   .num {{ text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }}
   tr.open td {{ color: #999; font-style: italic; }}
   .rate {{ color: #aaa; }}
+  table.extras {{ margin-bottom: 1.25rem; }}
 </style></head><body>
 <header>
   <h1>Time report — {e(project)}</h1>
@@ -311,7 +351,7 @@ def render_html(project, user, start_date, end_date, rows, totals, currency, rat
   <div class="range">{start_date} – {end_date}</div>
   <div class="totals">Total: <b>{total}</b>{f" &nbsp; Amount: <b>{amount}</b> {rate_str}" if amount else ""}</div>
 </header>
-<table>
+{extras_html}<table>
 <thead><tr><th>Date</th><th>Task</th><th>Start</th><th>End</th>
 <th class="num">Duration</th><th class="num">Amount</th></tr></thead>
 <tbody>
@@ -409,6 +449,12 @@ def cmd_log(project, length):
         print(l.rstrip())
 
 
+def cmd_extra(project, amount, desc, at):
+    ts = parse_at(at) if at else now_local()
+    append_line(year_file(project, ts.year), f"{ts.isoformat(timespec='seconds')} EXTRA {amount:g} {desc}")
+    print(f"extra {amount:g} — {desc}")
+
+
 def cmd_report(cfg, project, start_s, end_s, fmt):
     start_date = date.fromisoformat(start_s)
     end_date = date.fromisoformat(end_s) if end_s else date.today()
@@ -419,16 +465,18 @@ def cmd_report(cfg, project, start_s, end_s, fmt):
     user = cfg.get("user", {}).get("name", "")               # report subtitle
     sessions = pair_sessions(read_events(project, start_date.year, end_date.year))
     rows, totals, warnings = build_report(sessions, start_date, end_date, rate, now, now.date())
+    extras = build_extras(read_events(project, start_date.year, end_date.year, parse_extra),
+                          start_date, end_date, totals)
     for w in warnings:
         print("tt: " + w, file=sys.stderr)
     if fmt == "csv":
-        render_csv(rows, currency)
+        render_csv(rows, currency, extras)
     elif fmt == "json":
-        sys.stdout.write(render_json(label, user, start_date, end_date, rows, totals, currency))
+        sys.stdout.write(render_json(label, user, start_date, end_date, rows, totals, currency, extras))
     elif fmt == "html":
-        sys.stdout.write(render_html(label, user, start_date, end_date, rows, totals, currency, rate))
+        sys.stdout.write(render_html(label, user, start_date, end_date, rows, totals, currency, rate, extras))
     else:
-        sys.stdout.write(render_text(label, user, start_date, end_date, rows, totals, currency))
+        sys.stdout.write(render_text(label, user, start_date, end_date, rows, totals, currency, extras))
 
 
 # ---------- cli ----------
@@ -457,6 +505,11 @@ def main(argv=None):
     p = sub.add_parser("log")  # tail the last N raw log lines
     p.add_argument("--length", type=int, nargs="?", const=20, default=20)
 
+    p = sub.add_parser("extra", aliases=["e"])  # one-off invoice line: bonus, expense compensation, ...
+    p.add_argument("amount", type=float)
+    p.add_argument("description", nargs="+")
+    p.add_argument("--at", help="date/time for the item: -1[:30], HH:MM, H, or ISO timestamp")
+
     p = sub.add_parser("report", aliases=["rep"])
     p.add_argument("start_date")
     p.add_argument("end_date", nargs="?")
@@ -479,6 +532,8 @@ def main(argv=None):
         cmd_today(project)
     elif cmd == "log":
         cmd_log(project, args.length)
+    elif cmd in ("extra", "e"):
+        cmd_extra(project, args.amount, " ".join(args.description).strip(), args.at)
     elif cmd in ("report", "rep"):
         cmd_report(cfg, project, args.start_date, args.end_date, args.fmt)
 

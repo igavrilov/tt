@@ -63,6 +63,22 @@ def test_amount_and_fmt():
     assert rows[0]["amount"] == 240.0 and totals["amount"] == 240.0
 
 
+def test_extras():
+    assert tt.parse_extra("2026-07-05T12:00:00-04:00 EXTRA 250 Competition prize") == \
+        (T("2026-07-05T12:00:00-04:00"), 250.0, "Competition prize")
+    assert tt.parse_extra("2026-07-05T12:00:00-04:00 START a1b2 task") is None
+    assert tt.parse_extra("2026-07-05T12:00:00-04:00 EXTRA nope desc") is None
+    extras = [(T("2026-07-05T12:00:00-04:00"), 250.0, "Competition prize"),
+              (T("2026-08-05T12:00:00-04:00"), 200.0, "outside range")]
+    totals = {"secs": 0, "amount": 100.0}
+    rows = tt.build_extras(extras, date(2026, 7, 1), date(2026, 7, 31), totals)
+    assert [r["desc"] for r in rows] == ["Competition prize"]
+    assert totals["amount"] == 350.0
+    totals = {"secs": 0, "amount": None}  # extras alone still produce a money total
+    tt.build_extras(extras, date(2026, 7, 1), date(2026, 7, 31), totals)
+    assert totals["amount"] == 250.0
+
+
 def test_lock():
     tt.LOCK_FILE = Path(tempfile.mkdtemp()) / "timer.lock"
     tt.acquire_lock("A")                       # first timer holds the lock

@@ -30,12 +30,14 @@ tt stop                         # stop the running session
 tt stop --session a1b2          # stop a specific session by id
 tt today                        # print today's log lines + total time today (alias: t, tail)
 tt log --length 20              # print the last N raw log lines (default 20)
+tt extra 250 "Competition win"  # one-off invoice line (bonus, expense compensation, ...)
 tt report 2026-05-01 2026-05-31 # detailed report for a date range
 ```
 
 - `-p/--project NAME` on any command selects the project (default: `config.default_project`, else `default`).
-- Command prefixes: `s` = start, `c` = continue, `r` = resume, `t`/`tail` = today, `rep` = report.
-- `--at TIME` (on `start` and `stop`) sets the timestamp instead of *now*. Accepted forms:
+- Command prefixes: `s` = start, `c` = continue, `r` = resume, `t`/`tail` = today, `e` = extra, `rep` = report.
+- Extras appear in reports above the time table (date, description, amount) and are added to the total amount.
+- `--at TIME` (on `start`, `stop`, and `extra`) sets the timestamp instead of *now*. Accepted forms:
   - `-1` / `-1:30` → now minus 1h / 1h30m (`+` for the future)
   - `20:00` / `7` → today at that clock time
   - a full ISO timestamp, e.g. `2026-05-01T09:00:00`

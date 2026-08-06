@@ -79,6 +79,29 @@ def test_extras():
     assert totals["amount"] == 250.0
 
 
+def test_dismiss():
+    tt.TT_HOME = Path(tempfile.mkdtemp())
+    y = tt.now_local().year
+    f = tt.year_file("p", y)
+    f.parent.mkdir(parents=True)
+    f.write_text(f"{y}-01-01T09:00:00+00:00 START aaaa task A\n"
+                 f"{y}-01-01T10:00:00+00:00 STOP aaaa\n"
+                 f"{y}-01-02T09:00:00+00:00 START bbbb task B\n"
+                 f"{y}-01-02T10:00:00+00:00 STOP bbbb\n"
+                 f"{y}-01-03T09:00:00+00:00 EXTRA 50 bonus\n")
+    tt.cmd_dismiss("p", None)                 # last record is the extra line
+    assert "EXTRA" not in f.read_text()
+    tt.cmd_dismiss("p", "aaaa")               # by id, both lines go
+    assert "aaaa" not in f.read_text()
+    tt.cmd_dismiss("p", None)                 # last record is now session bbbb
+    assert f.read_text() == ""
+    try:
+        tt.cmd_dismiss("p", "zzzz")
+        assert False, "expected exit for unknown session"
+    except SystemExit:
+        pass
+
+
 def test_lock():
     tt.LOCK_FILE = Path(tempfile.mkdtemp()) / "timer.lock"
     tt.acquire_lock("A")                       # first timer holds the lock

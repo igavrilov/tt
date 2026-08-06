@@ -449,6 +449,39 @@ def cmd_log(project, length):
         print(l.rstrip())
 
 
+def cmd_dismiss(project, sid):
+    """Delete the last record (session or extra), or session `sid`, from the log."""
+    cur = now_local().year
+    files = [f for f in (year_file(project, y) for y in (cur - 1, cur)) if f.exists()]
+    if sid is None:
+        last = None  # ponytail: "last" = file order, which is append order (--at backdating aside)
+        for f in files:
+            for l in f.read_text().splitlines():
+                if parse_line(l) or parse_extra(l):
+                    last = (f, l)
+        if last is None:
+            sys.exit(f"tt: nothing to dismiss in project '{project}'")
+        f, l = last
+        if parse_extra(l):
+            lines = f.read_text().splitlines()
+            del lines[len(lines) - 1 - lines[::-1].index(l)]  # last occurrence only
+            f.write_text("".join(x + "\n" for x in lines))
+            print(f"dismissed: {l}")
+            return
+        sid = l.split()[2]
+    removed = []
+    for f in files:
+        keep, gone = [], []
+        for l in f.read_text().splitlines():
+            (gone if ((ev := parse_line(l)) and ev[2] == sid) else keep).append(l)
+        if gone:
+            removed += gone
+            f.write_text("".join(x + "\n" for x in keep))
+    if not removed:
+        sys.exit(f"tt: session {sid} not found")
+    print("dismissed:\n  " + "\n  ".join(removed))
+
+
 def cmd_extra(project, amount, desc, at):
     ts = parse_at(at) if at else now_local()
     append_line(year_file(project, ts.year), f"{ts.isoformat(timespec='seconds')} EXTRA {amount:g} {desc}")
@@ -505,6 +538,9 @@ def main(argv=None):
     p = sub.add_parser("log")  # tail the last N raw log lines
     p.add_argument("--length", type=int, nargs="?", const=20, default=20)
 
+    p = sub.add_parser("dismiss", aliases=["d"])  # delete the last record, or a session by id
+    p.add_argument("session", nargs="?")
+
     p = sub.add_parser("extra", aliases=["e"])  # one-off invoice line: bonus, expense compensation, ...
     p.add_argument("amount", type=float)
     p.add_argument("description", nargs="+")
@@ -532,6 +568,8 @@ def main(argv=None):
         cmd_today(project)
     elif cmd == "log":
         cmd_log(project, args.length)
+    elif cmd in ("dismiss", "d"):
+        cmd_dismiss(project, args.session)
     elif cmd in ("extra", "e"):
         cmd_extra(project, args.amount, " ".join(args.description).strip(), args.at)
     elif cmd in ("report", "rep"):

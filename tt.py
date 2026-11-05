@@ -123,9 +123,9 @@ def cmux_clear_status(ws, key):
 # ---------- log parsing (pure, testable) ----------
 
 def parse_line(line):
-    """-> (dt, verb, sid, task) or None. task is '' for STOP / nameless START."""
+    """-> (dt, verb, sid, task) or None. task is '' for STOP / DISCARD / nameless START."""
     parts = line.strip().split(maxsplit=3)
-    if len(parts) < 3 or parts[1] not in ("START", "STOP"):
+    if len(parts) < 3 or parts[1] not in ("START", "STOP", "DISCARD"):
         return None
     try:
         dt = datetime.fromisoformat(parts[0])
@@ -155,7 +155,7 @@ def read_events(project, y0, y1, parser=parse_line):
 
 
 def pair_sessions(events):
-    """Pair START/STOP by id, chronologically. Unmatched STARTs stay open."""
+    """Pair START/STOP by id; drop discarded sessions. Unmatched STARTs stay open."""
     open_by = {}
     done = []
     for dt, verb, sid, task in sorted(events, key=lambda e: e[0]):
@@ -163,8 +163,9 @@ def pair_sessions(events):
             open_by[sid] = {"sid": sid, "task": task, "start": dt, "stop": None}
         elif sid in open_by:
             s = open_by.pop(sid)
-            s["stop"] = dt
-            done.append(s)
+            if verb == "STOP":
+                s["stop"] = dt
+                done.append(s)
     return done + list(open_by.values())
 
 
@@ -400,6 +401,7 @@ def cmd_start(project, task, no_timer, at=None, cmux_status=False):
             run_timer(task, sid, f, ts, ws)  # STOP lands in the START's file, even across midnight/year
         finally:
             release_lock()
+    return sid
 
 
 def cmd_continue(project, no_timer, cmux_status=False):
@@ -518,7 +520,8 @@ def main(argv=None):
     cfg = load_config()
     ap = argparse.ArgumentParser(prog="tt", description="personal time tracking")
     ap.add_argument("-p", "--project", help="project (default: config.default_project or 'default')")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub = ap.add_subparsers(dest="cmd")
+    sub.add_parser("menubar", help="launch the macOS menu-bar app (default)")
 
     p = sub.add_parser("start", aliases=["s"])
     p.add_argument("task", nargs="*")
@@ -558,7 +561,17 @@ def main(argv=None):
     cmux_status = bool(cfg.get("cmux", {}).get("tab_status", False))
     cmd = args.cmd
 
-    if cmd in ("start", "s"):
+    if cmd in (None, "menubar"):
+        if sys.platform != "darwin":
+            ap.error("the menu-bar app requires macOS; use a CLI subcommand on other platforms")
+        try:
+            from tt_menubar import run
+        except ModuleNotFoundError as exc:
+            if exc.name != "rumps":
+                raise
+            ap.error('install the menu-bar dependencies with: uv tool install ".[menubar]"')
+        run(project)
+    elif cmd in ("start", "s"):
         cmd_start(project, " ".join(args.task).strip() or "(untitled)", args.no_timer, args.at, cmux_status)
     elif cmd in ("continue", "c", "resume", "r"):
         cmd_continue(project, args.no_timer, cmux_status)

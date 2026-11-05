@@ -1,17 +1,21 @@
 # tt
 
-Personal time tracking with invoice-ready reports. Single Python file, stdlib only, plain-text logs.
+Personal time tracking with a native macOS menu-bar app, a CLI, and invoice-ready reports.
+Both interfaces use the same plain-text logs.
 
 ## Install
 
-Python 3.11+, no dependencies.
+Python 3.11+. For the macOS menu-bar app:
 
 ```sh
-uv tool install .        # with uv (or: pipx install .)
-pip install .            # with pip
+uv tool install '.[menubar]'    # or: pipx install '.[menubar]'
+tt                             # launch the menu-bar app
 ```
 
-Or skip packaging entirely and just symlink the script:
+The menu-bar extra installs `rumps` and its native Cocoa bridge. For CLI-only use (any platform,
+no runtime dependencies): `uv tool install .` or `pip install .`.
+
+For CLI-only use, you can also skip packaging and symlink the script:
 
 ```sh
 chmod +x tt.py
@@ -20,7 +24,44 @@ ln -s "$PWD/tt.py" ~/.local/bin/tt
 
 You can also run it without installing: `uv run tt.py report 2026-05-01 2026-05-31`.
 
-## Usage
+## Menu-bar app (macOS)
+
+Run `tt` or `tt menubar`. Use `tt -p acme menubar` to select a project; otherwise the configured
+default project is used. The app has no Dock icon or main window. Keep the launching process
+running while using it.
+
+The menu bar shows a monochrome clock icon and elapsed hours and minutes (`HH:MM`),
+or `--:--` when stopped. Logs and reports retain second-level precision. The full session name appears as the first, non-clickable
+menu item (`No active session` when stopped). Below it, **Today: HH:MM:SS** shows the selected
+project's total, refreshed every second, including open sessions and excluding discarded ones.
+Like `tt today`, sessions count toward the day they started. The icon adapts to light and dark
+menu bars. Click it for:
+
+- **Start** — prompts for a task (prefilled with the previous task) and a start time
+  (default: current local time). Edit the time to backdate today's session; the timer counts
+  from the selected time. Disabled while running. Cancel does nothing; an empty task becomes
+  `(untitled)`.
+- **Stop** — saves the session; disabled while stopped.
+- **Discard** — cancels the session, excluding it from reports; disabled while stopped.
+- **Quit** — saves an active session before exiting. If saving fails, the app stays open to
+  let you retry.
+
+Only one menu-bar app can run at a time. Its timer shares the interactive CLI timer lock,
+so those two timers cannot run together. Independent `--no-timer` CLI sessions still work;
+the menu-bar app never adopts, stops, or discards them. An external CLI stop/dismiss of the
+menu-bar session is reflected on the next refresh.
+
+A force-quit or crash leaves the session open and may leave `~/.tt/timer.lock` behind.
+After confirming the timer process has exited, remove that stale lock and close the session
+with `tt stop --session ID` (use `tt log` to find the ID). Relaunching does not adopt old sessions.
+
+From a checkout without installing globally:
+
+```sh
+uv run --python 3.13 --extra menubar tt.py
+```
+
+## CLI usage
 
 ```sh
 tt start "backend work"         # start a task; prints a session id, shows a live timer (Ctrl+C stops)
@@ -130,11 +171,13 @@ Append-only plain text under `~/.tt/<project>/logs/YYYY.log`, one file per year:
 ```
 
 Timestamps carry the UTC offset. `STOP` is written into its `START`'s file, so a session crossing
-midnight or year-end stays whole. The log is the single source of truth — fix any mistake by
-editing it in a text editor.
+midnight or year-end stays whole. The menu-bar **Discard** action appends `<timestamp> DISCARD <id>` rather than deleting log
+lines, so unrelated concurrent writes remain intact. Discarded sessions do not appear in reports.
+The log is the single source of truth — fix any mistake by editing it in a text editor.
 
 ## Tests
 
 ```sh
 python3 test_tt.py
+python3 test_tt_menubar.py   # temporary logs and mocked UI; no macOS dependencies required
 ```

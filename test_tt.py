@@ -28,6 +28,21 @@ def test_pairing_interleaved():
     assert (by["c3d4"]["stop"] - by["c3d4"]["start"]).total_seconds() == 6900
 
 
+def test_discarded_session_is_excluded():
+    events = [tt.parse_line(line) for line in [
+        "2026-07-01T09:00:00+00:00 START aaaa discarded task",
+        "2026-07-01T09:05:00+00:00 START bbbb kept task",
+        "2026-07-01T09:30:00+00:00 DISCARD aaaa",
+        "2026-07-01T10:05:00+00:00 STOP bbbb",
+    ]]
+    sessions = tt.pair_sessions(events)
+    assert len(sessions) == 1 and sessions[0]["sid"] == "bbbb"
+    today = date(2026, 7, 1)
+    rows, totals, warnings = tt.build_report(sessions, today, today, None,
+                                             T("2026-07-01T12:00:00+00:00"), today)
+    assert len(rows) == 1 and totals["secs"] == 3600 and not warnings
+
+
 def test_open_session_live_vs_historical():
     open_sess = [{"sid": "a1b2", "task": "X", "start": T("2026-01-01T07:00:00-04:00"), "stop": None}]
     now = T("2026-07-01T12:00:00-04:00")

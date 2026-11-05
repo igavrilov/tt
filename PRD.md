@@ -4,11 +4,33 @@
 
 `tt` is a personal time tracking tool aimed to track working hours and generate report for invoicing.
 
-Implemented in **Python 3.11+** (stdlib only: `argparse`, `datetime`, `pathlib`, `csv`, `json`, `tomllib`). Single file, no dependencies, no build step.
+Implemented in **Python 3.11+**. The CLI uses only the standard library; the optional macOS
+menu-bar interface uses `rumps` and its Cocoa bridge. Both share the existing plain-text logs.
 
-## Specs
+## Menu-bar interface
 
-`tt` is a CLI local tool with the following commands:
+`tt` with no subcommand, or `tt menubar`, launches a menu-bar-only macOS app. The menu bar shows
+a monochrome clock icon and elapsed hours and minutes (`HH:MM`), or `--:--` while idle.
+Logs and reports retain second-level precision.
+The full session name is the first, non-clickable menu item (`No active session` while idle).
+A second non-clickable item shows `Today: HH:MM:SS` for the selected project, refreshed every
+second using the same start-date-based totals as `tt today` (including open sessions, excluding
+discarded sessions).
+
+- **Start** prompts for a task and a start time (default: current local time), and is disabled
+  while running. The selected time is logged and used to calculate elapsed time.
+- **Stop** saves the active session and is disabled while stopped.
+- **Discard** excludes the active session from reports and is disabled while stopped.
+- **Quit** saves an active session before exiting; a save failure keeps the app open.
+
+The app manages only sessions it starts, shares the interactive CLI timer lock, and allows
+independent non-interactive CLI sessions. Only one menu-bar app runs at a time. It uses the
+configured default project unless `-p/--project` is provided. Crashed sessions are recovered
+through the CLI, not automatically adopted.
+
+## CLI specs
+
+`tt` retains the following commands:
 
 - `tt s[tart] [optional task name]` - start tracking of a new task; prints the new session id
 - `tt c[ontinue]` or `tt r[esume]` - continue last task (starts a new task reusing the last task's name)
@@ -93,6 +115,9 @@ formats share the same header totals.
 
 `tt` is using an append-only plain text log. Timestamps are local time **with UTC offset** so
 reports stay correct across DST and travel (`datetime.now().astimezone().isoformat()`).
+
+The menu-bar Discard action appends `<timestamp> DISCARD <id>`. This closes and excludes the
+session without rewriting the log or affecting concurrent sessions.
 
 A `START` line is `<timestamp> START <id> <task name>`; the id is a short token, the task name is
 everything after it. A `STOP` line is `<timestamp> STOP <id>`. `START`/`STOP` pair by id, so
